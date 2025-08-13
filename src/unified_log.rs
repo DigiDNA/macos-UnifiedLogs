@@ -9,6 +9,7 @@
 //!
 //! Provides a simple library to parse the macOS Unified Log format.
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::catalog::CatalogChunk;
@@ -928,6 +929,26 @@ impl LogData {
             .push(missing_unified_log_data);
     }
 }
+
+impl Ord for LogData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.time as i64).cmp(&(other.time as i64))
+    }
+}
+
+impl PartialOrd for LogData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for LogData {
+    fn eq(&self, other: &Self) -> bool {
+        self.time == other.time
+    }
+}
+
+impl Eq for LogData {}
 
 #[cfg(test)]
 mod tests {
