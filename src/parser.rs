@@ -89,8 +89,17 @@ pub fn build_log(
     provider: &mut dyn FileProvider,
     timesync_data: &HashMap<String, TimesyncBoot>,
     exclude_missing: bool,
+    max_time: i64,
+    min_time: i64,
 ) -> (Vec<LogData>, UnifiedLogData) {
-    LogData::build_log(unified_data, provider, timesync_data, exclude_missing)
+    LogData::build_log(
+        unified_data,
+        provider,
+        timesync_data,
+        exclude_missing,
+        max_time,
+        min_time,
+    )
 }
 
 /// Parse all UUID files in provided directory. The directory should follow the same layout as the live system (ex: path/to/files/\<two character UUID\>/\<remaining UUID name\>)
@@ -406,7 +415,14 @@ mod tests {
         let timesync_data = collect_timesync(&provider).unwrap();
 
         let exclude_missing = false;
-        let (results, _) = build_log(&log_data, &mut provider, &timesync_data, exclude_missing);
+        let (results, _) = build_log(
+            &log_data,
+            &mut provider,
+            &timesync_data,
+            exclude_missing,
+            0,
+            i64::MAX,
+        );
         assert_eq!(results.len(), 207366);
         assert_eq!(results[10].process, "/usr/libexec/lightsoutmanagementd");
         assert_eq!(results[10].subsystem, "com.apple.lom");

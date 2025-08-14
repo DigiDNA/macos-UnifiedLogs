@@ -196,7 +196,14 @@ mod tests {
         let mut total = 0;
         for chunk in log_iterator {
             let exclude_missing = false;
-            let (results, _) = build_log(&chunk, &mut provider, &timesync_data, exclude_missing);
+            let (results, _) = build_log(
+                &chunk,
+                &mut provider,
+                &timesync_data,
+                exclude_missing,
+                0,
+                i64::MAX,
+            );
 
             if results[10].time == 1642302327364384800.0 {
                 assert_eq!(results.len(), 3805);

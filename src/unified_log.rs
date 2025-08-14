@@ -95,6 +95,8 @@ struct LogIterator<'a> {
     exclude_missing: bool,
     message_re: Regex,
     catalog_data_iterator_index: usize,
+    max_time: i64,
+    min_time: i64,
 }
 impl<'a> LogIterator<'a> {
     fn new(
@@ -102,6 +104,8 @@ impl<'a> LogIterator<'a> {
         provider: &'a mut dyn FileProvider,
         timesync_data: &'a HashMap<String, TimesyncBoot>,
         exclude_missing: bool,
+        max_time: i64,
+        min_time: i64,
     ) -> Result<Self, regex::Error> {
         /*
         Crazy Regex to try to get all log message formatters
@@ -144,6 +148,8 @@ impl<'a> LogIterator<'a> {
             exclude_missing,
             message_re,
             catalog_data_iterator_index: 0,
+            max_time,
+            min_time,
         })
     }
 }
@@ -181,6 +187,11 @@ impl Iterator for LogIterator<'_> {
                     continous_time,
                     preamble.base_continous_time,
                 );
+
+                let ts = timestamp as i64;
+                if ts > self.max_time || ts < self.min_time {
+                    continue;
+                }
 
                 // Our struct format to hold and show the log data
                 let mut log_data = LogData {
@@ -536,6 +547,11 @@ impl Iterator for LogIterator<'_> {
                 simpledump.continous_time,
                 no_firehose_preamble,
             );
+            let ts = timestamp as i64;
+            if ts > self.max_time || ts < self.min_time {
+                continue;
+            }
+
             let log_data = LogData {
                 subsystem: simpledump.subsystem.to_owned(),
                 thread_id: simpledump.thread_id,
@@ -568,6 +584,17 @@ impl Iterator for LogIterator<'_> {
         for statedump in &catalog_data.statedump {
             let no_firehose_preamble = 1;
 
+            let timestamp = TimesyncBoot::get_timestamp(
+                self.timesync_data,
+                &self.unified_log_data.header[0].boot_uuid,
+                statedump.continuous_time,
+                no_firehose_preamble,
+            );
+            let ts = timestamp as i64;
+            if ts > self.max_time || ts < self.min_time {
+                continue;
+            }
+
             let data_string = match statedump.unknown_data_type {
                 0x1 => Statedump::parse_statedump_plist(&statedump.statedump_data),
                 0x2 => match extract_protobuf(&statedump.statedump_data) {
@@ -599,12 +626,7 @@ impl Iterator for LogIterator<'_> {
                     }
                 }
             };
-            let timestamp = TimesyncBoot::get_timestamp(
-                self.timesync_data,
-                &self.unified_log_data.header[0].boot_uuid,
-                statedump.continuous_time,
-                no_firehose_preamble,
-            );
+
             let log_data = LogData {
                 subsystem: String::new(),
                 thread_id: 0,
@@ -764,6 +786,8 @@ impl LogData {
         provider: &mut dyn FileProvider,
         timesync_data: &HashMap<String, TimesyncBoot>,
         exclude_missing: bool,
+        max_time: i64,
+        min_time: i64,
     ) -> (Vec<LogData>, UnifiedLogData) {
         let mut log_data_vec: Vec<LogData> = Vec::new();
         // Need to keep track of any log entries that fail to find Oversize strings (sometimes the strings may be in other log files that have not been parsed yet)
@@ -773,9 +797,14 @@ impl LogData {
             oversize: Vec::new(),
         };
 
-        let Ok(log_iterator) =
-            LogIterator::new(unified_log_data, provider, timesync_data, exclude_missing)
-        else {
+        let Ok(log_iterator) = LogIterator::new(
+            unified_log_data,
+            provider,
+            timesync_data,
+            exclude_missing,
+            max_time,
+            min_time,
+        ) else {
             return (log_data_vec, missing_unified_log_data_vec);
         };
         for (mut log_data, mut missing_unified_log) in log_iterator {
@@ -1046,8 +1075,14 @@ mod tests {
         let log_data = parse_log(reader).unwrap();
 
         let exclude_missing = false;
-        let (results, _) =
-            LogData::build_log(&log_data, &mut provider, &timesync_data, exclude_missing);
+        let (results, _) = LogData::build_log(
+            &log_data,
+            &mut provider,
+            &timesync_data,
+            exclude_missing,
+            0,
+            i64::MAX,
+        );
 
         assert_eq!(results.len(), 207366);
         assert_eq!(results[0].process, "/usr/libexec/lightsoutmanagementd");
